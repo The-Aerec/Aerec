@@ -171,12 +171,21 @@ void CLuaZone::reloadNavmesh()
 std::optional<CLuaBaseEntity> CLuaZone::insertDynamicEntity(sol::table table)
 {
     auto& lua = luautils::lua;
+    uint16 ZoneID = m_pLuaZone->GetID();
 
     CBaseEntity* PEntity = nullptr;
     if (table.get_or<uint8>("objtype", TYPE_NPC) == TYPE_NPC)
     {
         PEntity = new CNpcEntity();
         PEntity->name = "DefaultName";
+
+        PEntity->targid = m_pLuaZone->GetZoneEntities()->GetNewDynamicTargID();
+        if (PEntity->targid >= 0x900)
+        {
+            ShowError("CLuaZone::insertDynamicEntity : targid is high (03hX), update packets will be ignored", PEntity->targid);
+        }
+
+        PEntity->id = 0x1000000 + (ZoneID << 12) + PEntity->targid;
     }
     else
     {
@@ -188,19 +197,6 @@ std::optional<CLuaBaseEntity> CLuaZone::insertDynamicEntity(sol::table table)
 
     // NOTE: Mob allegiance is the default for NPCs
     PEntity->allegiance = static_cast<ALLEGIANCE_TYPE>(table.get_or<uint8>("allegiance", ALLEGIANCE_TYPE::MOB));
-
-    uint16 ZoneID = m_pLuaZone->GetID();
-
-    // TODO: Wrap this entity in a unique_ptr that will free this dynamic targ ID
-    //       on despawn/destruction
-    // TODO: The tracking of these IDs is pretty bad also, fix that in zone_entities
-    PEntity->targid = m_pLuaZone->GetZoneEntities()->GetNewDynamicTargID();
-    if (PEntity->targid >= 0x900)
-    {
-        ShowError("CLuaZone::insertDynamicEntity : targid is high (03hX), update packets will be ignored", PEntity->targid);
-    }
-
-    PEntity->id = 0x1000000 + (ZoneID << 12) + PEntity->targid;
 
     PEntity->loc.zone       = m_pLuaZone;
     PEntity->loc.p.rotation = table.get_or<uint8>("rotation", 0);
@@ -225,6 +221,9 @@ std::optional<CLuaBaseEntity> CLuaZone::insertDynamicEntity(sol::table table)
     PEntity->packetName = name;
 
     PEntity->isRenamed = true;
+
+    ShowInfo(fmt::format("Spawning Dynamic Entity: {} - {} - {}",
+        PEntity->packetName, PEntity->id, PEntity->targid));
 
     auto typeKey = (PEntity->objtype == TYPE_NPC) ? "npcs" : "mobs";
     auto cacheEntry = lua[sol::create_if_nil]["xi"]["zones"][(const char*)m_pLuaZone->GetName()][typeKey][lookupName];
@@ -265,8 +264,6 @@ std::optional<CLuaBaseEntity> CLuaZone::insertDynamicEntity(sol::table table)
         {
             cacheEntry["onMobDeath"] = [](){}; // Empty func
         }
-
-        m_pLuaZone->InsertMOB(PMob);
     }
 
     if (table["look"].get_type() == sol::type::number)

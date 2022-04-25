@@ -452,10 +452,29 @@ uint16 CZoneEntities::GetNewCharTargID()
 uint16 CZoneEntities::GetNewDynamicTargID()
 {
     // NOTE: 0x0E (entity_update) entity updates are valid for 0 to 1023 and 1792 to 2303
-    // TODO: As in GetNewCharTargID, we should be searching in the valid range for IDs
-    //     : that aren't used yet, and releasing them when we're done.
-    uint16 offset = m_DynamicTargIDCount++;
-    return 0x800 + offset;
+    // NOTE: Start in the range 0x700-0x900 first, since that is where dynamic entities
+    //     : naturally live, then start looking in the space where mobs and npcs live
+    //     : 0-1023.
+
+    // TODO: Why is the range 0x700-0x800 not valid?
+    for (uint16 idx = 0x800; idx < 0x900; ++idx)
+    {
+        // If new targid can't be found, it isn't in use. So we'll use it.
+        if (m_mobList.find(idx) == m_mobList.end() && m_npcList.find(idx) == m_npcList.end())
+        {
+            return idx;
+        }
+    }
+    for (uint16 idx = 0x000; idx < 0x400; ++idx)
+    {
+        // If new targid can't be found, it isn't in use. So we'll use it.
+        if (m_mobList.find(idx) == m_mobList.end() && m_npcList.find(idx) == m_npcList.end())
+        {
+            return idx;
+        }
+    }
+    ShowError("Ran out of Dynamic TargIDs!");
+    return 0x000;
 }
 
 bool CZoneEntities::CharListEmpty() const
@@ -745,31 +764,16 @@ CBaseEntity* CZoneEntities::GetEntity(uint16 targid, uint8 filter)
             }
         }
     }
-    // TODO: Combine Trusts and Pets into the same id space
-    else if (targid < 0x780) // 1920
+    else if (targid < 0x900)
     {
-        if (filter & TYPE_PET)
+        if (filter & TYPE_MOB)
         {
-            EntityList_t::const_iterator it = m_petList.find(targid);
-            if (it != m_petList.end())
+            EntityList_t::const_iterator it = m_mobList.find(targid);
+            if (it != m_mobList.end())
             {
                 return it->second;
             }
         }
-    }
-    else if (targid < 0x800) // 2048
-    {
-        if (filter & TYPE_TRUST)
-        {
-            EntityList_t::const_iterator it = m_trustList.find(targid);
-            if (it != m_trustList.end())
-            {
-                return it->second;
-            }
-        }
-    }
-    else if (targid < 0x1000) // 2048 - 4096 are dynamic entities
-    {
         if (filter & TYPE_NPC)
         {
             EntityList_t::const_iterator it = m_npcList.find(targid);
@@ -778,10 +782,18 @@ CBaseEntity* CZoneEntities::GetEntity(uint16 targid, uint8 filter)
                 return it->second;
             }
         }
-        if (filter & TYPE_MOB)
+        if (filter & TYPE_PET)
         {
-            EntityList_t::const_iterator it = m_mobList.find(targid);
-            if (it != m_mobList.end())
+            EntityList_t::const_iterator it = m_petList.find(targid);
+            if (it != m_petList.end())
+            {
+                return it->second;
+            }
+        }
+        if (filter & TYPE_TRUST)
+        {
+            EntityList_t::const_iterator it = m_trustList.find(targid);
+            if (it != m_trustList.end())
             {
                 return it->second;
             }
@@ -1106,9 +1118,11 @@ void CZoneEntities::ZoneServer(time_point tick, bool check_regions)
 
     luautils::OnZoneTick(this->m_zone);
 
+    std::vector<CBaseEntity*> dynamicEntitiesToDelete;
+
     for (EntityList_t::const_iterator it = m_mobList.begin(); it != m_mobList.end(); ++it)
     {
-        CMobEntity* PMob = (CMobEntity*)it->second;
+        CMobEntity* PMob = static_cast<CMobEntity*>(it->second);
 
         if (PMob->PBattlefield && PMob->PBattlefield->CanCleanup())
         {
@@ -1122,7 +1136,29 @@ void CZoneEntities::ZoneServer(time_point tick, bool check_regions)
             PMob->StatusEffectContainer->TickRegen(tick);
             PMob->StatusEffectContainer->TickEffects(tick);
         }
+
         PMob->PAI->Tick(tick);
+
+        if (PMob->IsDynamicEntity() && PMob->status == STATUS_TYPE::DISAPPEAR)
+        {
+            if (std::find(dynamicEntitiesToDelete.begin(), dynamicEntitiesToDelete.end(), PMob) == dynamicEntitiesToDelete.end())
+            {
+                dynamicEntitiesToDelete.emplace_back(PMob);
+            }
+        }
+    }
+
+    for (auto* PEntity : dynamicEntitiesToDelete)
+    {
+        if (PEntity)
+        {
+            ShowInfo(fmt::format("Despawning Dynamic Entity: {} - {} - {}",
+                PEntity->packetName, PEntity->id, PEntity->targid));
+
+            m_mobList.erase(PEntity->targid);
+            delete PEntity;
+            PEntity = nullptr;
+        }
     }
 
     for (EntityList_t::const_iterator it = m_npcList.begin(); it != m_npcList.end(); ++it)

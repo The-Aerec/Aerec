@@ -1,4 +1,4 @@
-/*
+﻿/*
 ===========================================================================
 
   Copyright (c) 2010-2015 Darkstar Dev Teams
@@ -33,6 +33,7 @@
 #include "../spell.h"
 #include "../status_effect_container.h"
 #include "../trait.h"
+#include "../zone_entities.h"
 #include "battleutils.h"
 #include "mobutils.h"
 #include "petutils.h"
@@ -1386,7 +1387,16 @@ Usage:
 
     CMobEntity* InstantiateDynamicMob(uint32 groupid, uint16 groupZoneId, uint16 targetZoneId)
     {
+        CZone*      PZone = zoneutils::GetZone(targetZoneId);
         CMobEntity* PMob = new CMobEntity();
+
+        PMob->targid = PZone->GetZoneEntities()->GetNewDynamicTargID();
+        if (PMob->targid >= 0x900)
+        {
+            ShowError("CLuaZone::insertDynamicEntity : targid is high (03hX), update packets will be ignored", PMob->targid);
+        }
+
+        PMob->id = 0x1000000 + (targetZoneId << 12) + PMob->targid;
 
         const char* Query = "SELECT zoneid, mob_groups.name, packet_name, \
         respawntime, spawntype, dropid, mob_groups.HP, mob_groups.MP, minLevel, maxLevel, \
