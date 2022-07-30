@@ -22,14 +22,14 @@ local minionGroup =
 
 local spellLists =
 {
-    [459] = 494, -- Fire List
-    [460] = 495, -- Ice List
-    [461] = 496, -- Wind List
-    [462] = 497, -- Earth List
-    [463] = 498, -- Ltng List
-    [464] = 499, -- Water List
-    [465] = 493, -- Light List
-    [466] = 500, -- Dark List
+    [459] = 5025, -- Fire List
+    [460] = 5026, -- Ice List
+    [461] = 5027, -- Wind List
+    [462] = 5028, -- Earth List
+    [463] = 5029, -- Ltng List
+    [464] = 5030, -- Water List
+    [465] = 5024, -- Light List
+    [466] = 5031, -- Dark List
 }
 
 local astralFlowPets = function()

@@ -70,6 +70,7 @@
 #include "../modifier.h"
 #include "../packets/char_job_extra.h"
 #include "../packets/status_effects.h"
+#include "../petskill.h"
 #include "../spell.h"
 #include "../status_effect_container.h"
 #include "../trade_container.h"
@@ -1103,7 +1104,7 @@ void CCharEntity::OnWeaponSkillFinished(CWeaponSkillState& state, action_t& acti
                     }
                 }
 
-                if ((actionTarget.reaction & REACTION::HIT) != REACTION::NONE)
+                if (actionTarget.reaction == REACTION::HIT)
                 {
                     int wspoints = settings::get<uint8>("map.WS_POINTS_BASE");
                     if (PWeaponSkill->getPrimarySkillchain() != 0)
@@ -1301,7 +1302,25 @@ void CCharEntity::OnAbility(CAbilityState& state, action_t& action)
         // #TODO: get rid of this to script, too
         if (PAbility->isPetAbility())
         {
-            if (PPet) // is a bp - don't display msg and notify pet
+            CPetEntity* PPetEntity = dynamic_cast<CPetEntity*>(PPet);
+            CPetSkill*  PPetSkill  = battleutils::GetPetSkill(PAbility->getID());
+
+            if (PPetEntity && PPetSkill) // is a real pet (not charmed) and has pet ability  - don't display msg and notify pet
+            {
+                actionList_t& actionList     = action.getNewActionList();
+                actionList.ActionTargetID    = PTarget->id;
+                actionTarget_t& actionTarget = actionList.getNewActionTarget();
+                actionTarget.animation       = 94; // assault anim
+                actionTarget.reaction        = REACTION::NONE;
+                actionTarget.speceffect      = SPECEFFECT::RECOIL;
+                actionTarget.param           = 0;
+                actionTarget.messageID       = 0;
+
+                auto PPetTarget = PTarget->targid;
+
+                PPetEntity->PAI->PetSkill(PPetTarget, PPetSkill->getID());
+            }
+            else if (PPet) // may be a bp, fallback - don't display msg and notify pet
             {
                 actionList_t& actionList     = action.getNewActionList();
                 actionList.ActionTargetID    = PTarget->id;
@@ -1468,6 +1487,13 @@ void CCharEntity::OnRangedAttack(CRangeState& state, action_t& action)
 {
     TracyZoneScoped;
     auto* PTarget = static_cast<CBattleEntity*>(state.GetTarget());
+
+    if (battleutils::IsParalyzed(this))
+    {
+        // display paralyzed
+        loc.zone->PushPacket(this, CHAR_INRANGE_SELF, new CMessageBasicPacket(this, PTarget, 0, 0, MSGBASIC_IS_PARALYZED));
+        return;
+    }
 
     int32 damage      = 0;
     int32 totalDamage = 0;
@@ -1856,6 +1882,14 @@ void CCharEntity::OnItemFinish(CItemState& state, action_t& action)
     TracyZoneScoped;
     auto* PTarget = static_cast<CBattleEntity*>(state.GetTarget());
     auto* PItem   = state.GetItem();
+
+    if (battleutils::IsParalyzed(this))
+    {
+        // display paralyzed
+        // TODO: Make paralyze eat the item or charge when proced.
+        loc.zone->PushPacket(this, CHAR_INRANGE_SELF, new CMessageBasicPacket(this, PTarget, 0, 0, MSGBASIC_IS_PARALYZED));
+        return;
+    }
 
     // TODO: I'm sure this is supposed to be in the action packet... (animation, message)
     if (PItem->getAoE())
