@@ -692,6 +692,7 @@ xi.items =
     CLUSTERED_TAR                   = 1880,
     SHIELD_BUG                      = 1881,
     GLASS_SHEET                     = 1887,
+    SALINATOR                       = 1893,
     HIGH_QUALITY_EUVHI_ORGAN        = 1899,
     HIGH_QUALITY_AERN_ORGAN         = 1900,
     VICE_OF_ANTIPATHY               = 1901,
